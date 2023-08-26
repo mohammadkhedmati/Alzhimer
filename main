@@ -1,0 +1,68 @@
+library(methods)
+library(neurobase)
+library(fslr)
+library(extrantsr)
+library(scales)
+library(knitr)
+opts_chunk$set(echo=TRUE, prompt=FALSE, message=FALSE, warning=FALSE, comment="", results='hide', cache= TRUE)
+
+options(fsl.path = "/usr/local/fsl/fsl")
+options(fsl.outputtype = "NIFTI_GZ")
+
+nm <- list.files(path="~/Desktop/BRAIN/AD")
+pathfolderREAD = "~/Desktop/BRAIN/AD/"
+pathfolderOUT = "~/Desktop/BRAIN/AD/output/"
+temp = readnii("~/Desktop/BRAIN/AD/Temp/sub1")
+
+## ----img-----------------------------------------------------------------
+# img.name = "AD2.nii"
+# img.stub = nii.stub(img.name)
+fnum = length(nm)
+while (fnum>0) {
+  
+  filenumber = nm[fnum]
+  filenumber.name = filenumber
+  filenumber.stub = nii.stub(filenumber.name)
+  
+  fileread = paste0(pathfolderREAD,filenumber)
+  tasvir = readnii(fileread)
+  
+  register2 = flirt(infile = tasvir,reffile = temp,dof = 12,retimg = TRUE)
+  
+  # orthographic(temp)
+  # orthographic(register2)
+  save_register = paste0(pathfolderOUT,filenumber.stub,"_reg")
+  writenii(register2,filename = save_register)
+  
+  fast_img = fsl_biascorrect(register2,retimg = TRUE)
+  
+  cog = cog(fast_img, ceil=TRUE)
+  cog = paste("-c",paste(cog,collapse=" "))
+  
+  outfile_without_brain = paste0(pathfolderOUT,filenumber.stub,"_withoutbrain")
+  temp3 =fslbet_robust(fast_img, outfile = outfile_without_brain, retimg = TRUE, correct = FALSE,
+                       recog = TRUE, reorient = FALSE, bet.opts = "", remove.neck = TRUE, swapdim = FALSE,
+                       robust.mask = FALSE, remover = "double_remove_neck",
+                       template.file = file.path(fsldir(), "data/standard","MNI152_T1_1mm_brain.nii.gz"), 
+                       template.mask = file.path(fsldir(), "data/standard", "MNI152_T1_1mm_brain_mask.nii.gz"))
+  
+  orthographic(temp3)
+  ## ----bet_plot, dependson="bet", cache=FALSE------------------------------
+  ortho2(fast_img, temp3 > 0, col.y=alpha("red", 0.5))
+  
+  ## ----fast, dependson="bet"-----------------------------------------------
+  outfast = paste0(pathfolderOUT,filenumber.stub,"_BET_FAST")
+  fast = fast(file = temp3, outfile = outfast, opts = '-N')
+  
+  ## ----fast_plot, dependson="fast", cache=FALSE----------------------------
+  ortho2(temp3, fast == 3, col.y=alpha("red", 0.5))
+  
+  ## ----fast_plot_csf_gm, dependson="fast", cache=FALSE---------------------
+  ortho2(temp3, fast == 1, col.y=alpha("red", 0.5), text="CSF Results")
+  ortho2(temp3, fast == 2, col.y=alpha("red", 0.5), text="Gray Matter\nResults")
+  
+  ## ----outfiles, results='markup'------------------------------------------
+  patternfile = paste0(filenumber.stub,"_BET_FAST")
+  list.files(pattern=patternfile)
+  fnum = fnum - 1
+}
